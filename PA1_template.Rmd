@@ -7,19 +7,125 @@ output:
 
 
 ## Loading and preprocessing the data
+``` {r loading, echo = TRUE}
+library("knitr")
+library("rmarkdown")
+## Constants ##
+localFile <- "activity.zip"
+
+## Download and unzip 
+# Skip unzipping if data exist
+if (!file.exists("activity.csv")) {
+  unzip(localFile)
+}
+
+## load data
+activitydata <- read.csv("activity.csv")
+## select complete cases 
+actcompltedata <-activitydata[complete.cases(activitydata),]
+```
 
 
 
 ## What is mean total number of steps taken per day?
+``` {r plot, echo = TRUE}
+library(ggplot2) 
+tabledata <- aggregate(steps ~ date,actcompltedata, sum)
 
+myplot <- qplot(tabledata$steps, geom="histogram", binwidth = 5000) 
+myplot + labs(list(title = "Total Steps Per Day", x = "Steps", y = "Frequency"))
 
+mean(tabledata$steps)
+median(tabledata$steps)
+```
+
+The mean number of steps taken per day is `r as.integer(mean(tabledata$steps),0)`.
+The median number of steps taken per day is `r median(tabledata$steps)`.
 
 ## What is the average daily activity pattern?
 
+```{r}
+# preprocessing data for plot
+stepsinterval <- aggregate(steps ~ interval, actcompltedata, mean)
 
+intervalplot <- qplot(stepsinterval$interval, stepsinterval$steps, geom="line")
+intervalplot + labs(list(title = "Average number of steps over all days", x = "Interval", y = "Average number of steps"))
+
+#preparefuction 
+# find row with max of steps
+maxsteps <- which.max(stepsinterval$steps)
+# find interval with this max
+stepsinterval[maxsteps, ]
+pit <- stepsinterval[maxsteps, ]
+
+```
+The interval `r pit[1]`, contains the maximum number of steps (`r round(pit[2],1)`).
 
 ## Imputing missing values
 
+```{r}
+sum(is.na(activitydata))
+```
 
+There are `r sum(is.na(activitydata))` missing values in the dataset. 
+
+For imputing missing values I use mean for that 5-minute interval caluclated earlier and presented on above graph.
+```{r}
+dataimputed <- activitydata
+for (i in 1:nrow(dataimputed)) {
+  if (is.na(dataimputed$steps[i])) {
+    intervalvalue <- dataimputed$interval[i]
+    stepsvalue <- stepsinterval[
+      stepsinterval$interval == intervalvalue,]
+    dataimputed$steps[i] <- stepsvalue$steps
+  }
+}
+
+tabledataimputed <- aggregate(steps ~ date,dataimputed, sum)
+
+myplot <- qplot(tabledataimputed$steps, geom="histogram", binwidth = 5000) 
+myplot + labs(list(title = "Total Steps Per Day", x = "Steps", y = "Frequency"))
+
+mean(tabledataimputed$steps)
+median(tabledataimputed$steps)
+```
+
+The mean number of steps taken per day is `r as.integer(mean(tabledataimputed$steps),0)`.
+The median number of steps taken per day is `r as.integer(median(tabledataimputed$steps),0)`.
+
+The mean with imputed values remains the same as mean calculated with NA values removed. Median is now higher by one step. 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+df <- dataimputed ## save typing long name 
+# convert date to Date class
+df$date <- as.Date(df$date, "%Y-%m-%d")
+# add a new column for storing day of the week 
+df$day <- weekdays(df$date)
+# add a new column to determine weekend or not
+df$day_type <- c("weekday")
+# If day is Saturday or Sunday, make weekend
+for (i in 1:nrow(df)){
+  if (df$day[i] == "Saturday" || df$day[i] == "Sunday"){
+    df$day_type[i] <- "weekend"
+  }
+}
+
+df_imputed_steps_by_interval <- aggregate(steps ~ interval + day_type, df, mean)
+
+## plot it 
+qplot(interval, 
+      steps, 
+      data = df_imputed_steps_by_interval, 
+      type = 'l', 
+      geom=c("line"),
+      xlab = "Interval", 
+      ylab = "Number of steps", 
+      main = "") +
+  facet_wrap(~ day_type, ncol = 1)
+```
+
+```{r cleanup}
+# remove the data frames to free memory
+rm(localFile, activitydata, actcompltedata,tabledata,myplot, stepsinterval,maxsteps, pit, dataimputed, tabledataimputed, df,df_imputed_steps_by_interval)
+```
